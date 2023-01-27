@@ -43,10 +43,11 @@ class UART(Connector):
     """Connector implementation for serial UART connection to the sensor."""
 
     CONNECTIONTYPE_UART = 'uart'
+    MAX_RETRIES = 10
 
     def __init__(self, node: Node, baudrate, port, timeout):
         """Initialize the UART class.
-        
+
         :param node: a ROS node
         :param baudrate: baudrate to configure UART communication to
         :param port: UART port to connect to
@@ -63,7 +64,7 @@ class UART(Connector):
 
     def connect(self):
         """Connect to the sensor.
-        
+
         :return:
         """
         self.node.get_logger().info('Opening serial port: "%s"...' % self.port)
@@ -88,50 +89,59 @@ class UART(Connector):
         buf_out.append(reg_addr)
         buf_out.append(length)
 
-        try:
-            self.serialConnection.write(buf_out)
-            buf_in = bytearray(self.serialConnection.read(2 + length))
-        except Exception as e:  # noqa: B902
-            raise TransmissionException('Transmission error: %s' % e)
+        for attempt in range(0, self.MAX_RETRIES):
+            try:
+                self.serialConnection.write(buf_out)
+                buf_in = bytearray(self.serialConnection.read(2 + length))
+            except Exception as e:  # noqa: B902
+                self.node.get_logger().error('Transmission error: %s' % e)
+                continue
 
-        # Check for valid response length (the smallest (error) message has at least 2 bytes):
-        if buf_in.__len__() < 2:
-            raise TransmissionException('Unexpected length of READ-request response: %s'
-                                        % buf_in.__len__())
+            # Check for valid response length (the smallest (error) message has at least 2 bytes):
+            if buf_in.__len__() < 2:
+                self.node.get_logger().error('Unexpected length of READ-request response: %s'
+                                            % buf_in.__len__())
+                continue
 
-        
-        # Check for READ result (success or failure):
-        if buf_in[0] == registers.COM_START_BYTE_ERROR_RESP:
-            # Error 0x07 (BUS_OVER_RUN_ERROR) can be "normal" if data fusion is not yet ready
-            if buf_in[1] == 7:
-                # see #5
-                raise BusOverRunException('Data fusion not ready, resend read request')
-            else:
-                raise TransmissionException('READ-request failed with error code %s'
-                                            % hex(buf_in[1]))
-        
-        # Check for correct READ response header:
-        if buf_in[0] != registers.COM_START_BYTE_RESP:
-            raise TransmissionException('Wrong READ-request response header %s' % hex(buf_in[0]))
+            # Check for READ result (success or failure):
+            if buf_in[0] == registers.COM_START_BYTE_ERROR_RESP:
+                # Error 0x07 (BUS_OVER_RUN_ERROR) can be "normal" if data fusion is not yet ready
+                if buf_in[1] == 7:
+                    # see #5
+                    self.node.get_logger().error('Data fusion not ready, resend read request')
+                    continue
+                else:
+                    self.node.get_logger().error('READ-request failed with error code %s'
+                                                % hex(buf_in[1]))
+                    continue
 
-        if (buf_in.__len__()-2) != buf_in[1]:
-            raise TransmissionException('Payload length mismatch detected: '
-                                        + '  received=%s, awaited=%s'
-                                        % (buf_in.__len__()-2, buf_in[1]))
+            # Check for correct READ response header:
+            if buf_in[0] != registers.COM_START_BYTE_RESP:
+                self.node.get_logger().error('Wrong READ-request response header %s' % hex(buf_in[0]))
+                continue
 
-        # Check for correct READ-request response length
-        if buf_in.__len__() != (2 + length):
-            raise TransmissionException('Incorrect READ-request response length: %s'
-                                        % (2 + length))
+            if (buf_in.__len__()-2) != buf_in[1]:
+                self.node.get_logger().error('Payload length mismatch detected: '
+                                            + '  received=%s, awaited=%s'
+                                            % (buf_in.__len__()-2, buf_in[1]))
+                continue
 
-        # remove the 0xBB:
-        buf_in.pop(0)
+            # Check for correct READ-request response length
+            if buf_in.__len__() != (2 + length):
+                self.node.get_logger().error('Incorrect READ-request response length: %s'
+                                            % (2 + length))
+                continue
 
-        # remove the length information:
-        buf_in.pop(0)
+            # remove the 0xBB:
+            buf_in.pop(0)
 
-        # Return the received payload:
-        return buf_in
+            # remove the length information:
+            buf_in.pop(0)
+
+            # Return the received payload:
+            return buf_in
+
+        raise Exception(f'Terminating, number of tries in serial read function exceeded max_tries ({self.MAX_RETRIES}).')
 
     def write(self, reg_addr, length, data: bytes):
         """
@@ -148,13 +158,19 @@ class UART(Connector):
         buf_out.append(length)
         buf_out += data
 
-        try:
-            self.serialConnection.write(buf_out)
-            buf_in = bytearray(self.serialConnection.read())
-        except Exception:  # noqa: B902
-            return False
+        for attempt in range(0, self.MAX_RETRIES):
+            try:
+                self.serialConnection.write(buf_out)
+                buf_in = bytearray(self.serialConnection.read(2))
+            except Exception as e:  # noqa: B902
+                self.node.get_logger().error('Write exception: %s' % e)
+                continue
 
-        if (buf_in.__len__() != 2) or (buf_in[1] != 0x01):
-            return False
-        return True
+            if (buf_in.__len__() != 2) or (buf_in[1] != 0x01):
+                self.node.get_logger().error(f'Incorrect Bosh IMU device response. buf_in: {buf_in}')
+                continue
 
+            return True
+
+        self.node.get_logger().error(f'Number of tries in serial write function exceeded max_tries ({self.MAX_RETRIES}).')
+        return False
