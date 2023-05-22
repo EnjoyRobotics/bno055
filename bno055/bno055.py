@@ -64,7 +64,8 @@ class Bno055Node(Node):
             connector = UART(self,
                              self.param.uart_baudrate.value,
                              self.param.uart_port.value,
-                             self.param.uart_timeout.value)
+                             self.param.uart_timeout.value,
+                             self.param.uart_first_bytes_timeout.value)
         elif self.param.connection_type.value == I2C.CONNECTIONTYPE_I2C:
             connector = I2C(self,
                             self.param.i2c_bus.value,
