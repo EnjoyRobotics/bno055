@@ -37,6 +37,7 @@ from bno055.params.NodeParameters import NodeParameters
 from bno055.sensor.SensorService import SensorService
 import rclpy
 from rclpy.node import Node
+from service_robot_core.process_priority import set_process_priority_high
 
 
 class Bno055Node(Node):
@@ -89,6 +90,9 @@ def main(args=None):
         """Main entry method for this ROS2 node."""
         # Initialize ROS Client Libraries (RCL) for Python:
         rclpy.init()
+
+        # Set the process priority to high to prevent sensor data loss
+        set_process_priority_high()
 
         # Create & initialize ROS2 node:
         node = Bno055Node()
