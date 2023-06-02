@@ -35,7 +35,6 @@ import serial
 from rclpy.node import Node
 
 from bno055 import registers
-from bno055.error_handling.exceptions import BusOverRunException, TransmissionException
 from bno055.connectors.Connector import Connector
 
 
@@ -103,7 +102,7 @@ class UART(Connector):
             # Check for valid response length (the smallest (error) message has at least 2 bytes):
             if buf_in.__len__() < 2:
                 self.node.get_logger().error('Unexpected length of READ-request response: %s'
-                                            % buf_in.__len__())
+                                             % buf_in.__len__())
                 continue
 
             # Check for READ result (success or failure):
@@ -111,18 +110,19 @@ class UART(Connector):
                 # Error 0x07 (BUS_OVER_RUN_ERROR) can be "normal" if data fusion is not yet ready
                 if buf_in[1] == 7:
                     # see #5
-                    self.node.get_logger().error('Data fusion not ready, resend read request')
+                    self.node.get_logger().debug('Data fusion not ready, resend read request')
                     continue
                 else:
                     self.node.get_logger().error('READ-request failed with error code %s'
-                                                % hex(buf_in[1]))
+                                                 % hex(buf_in[1]))
                     continue
 
             # Check for correct READ response header:
             if buf_in[0] != registers.COM_START_BYTE_RESP:
-                self.node.get_logger().error('Wrong READ-request response header %s' % hex(buf_in[0]))
+                self.node.get_logger().error('Wrong READ-request response header %s'
+                                             % hex(buf_in[0]))
                 continue
-            
+
             self.serialConnection.timeout = self.timeout
             try:
                 buf_in.extend(self.serialConnection.read(length))
@@ -132,14 +132,14 @@ class UART(Connector):
 
             if (buf_in.__len__()-2) != buf_in[1]:
                 self.node.get_logger().error('Payload length mismatch detected: '
-                                            + '  received=%s, awaited=%s'
-                                            % (buf_in.__len__()-2, buf_in[1]))
+                                             + '  received=%s, awaited=%s'
+                                             % (buf_in.__len__()-2, buf_in[1]))
                 continue
 
             # Check for correct READ-request response length
             if buf_in.__len__() != (2 + length):
                 self.node.get_logger().error('Incorrect READ-request response length: %s'
-                                            % (2 + length))
+                                             % (2 + length))
                 continue
 
             # remove the 0xBB:
@@ -151,7 +151,8 @@ class UART(Connector):
             # Return the received payload:
             return buf_in
 
-        raise Exception(f'Terminating, number of tries in serial read function exceeded max_tries ({self.MAX_RETRIES}).')
+        raise Exception(f'Terminating, number of tries in serial read function \
+                        exceeded max_tries ({self.MAX_RETRIES}).')
 
     def write(self, reg_addr, length, data: bytes):
         """
@@ -179,10 +180,12 @@ class UART(Connector):
                 continue
 
             if (buf_in.__len__() != 2) or (buf_in[1] != 0x01):
-                self.node.get_logger().error(f'Incorrect Bosh IMU device response. buf_in: {buf_in}')
+                self.node.get_logger().error(f'Incorrect Bosh IMU device response. buf_in: \
+                                             {buf_in}')
                 continue
 
             return True
 
-        self.node.get_logger().error(f'Number of tries in serial write function exceeded max_tries ({self.MAX_RETRIES}).')
+        self.node.get_logger().error(f'Number of tries in serial write function exceeded \
+                                     max_tries ({self.MAX_RETRIES}).')
         return False
