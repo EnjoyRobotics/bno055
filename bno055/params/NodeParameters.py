@@ -68,7 +68,7 @@ class NodeParameters:
         # UART First Bytes Timeout in seconds (time to wait for the first bytes of a message)
         # Should be smaller than the UART timeout to avoid unnecessary waiting when the sensor is
         # still computing the fusion and doesn't respond yet
-        node.declare_parameter('uart_first_bytes_timeout', value=0.01)
+        node.declare_parameter('uart_first_bytes_timeout', value=0.02)
         # tf frame id
         node.declare_parameter('frame_id', value='bno055')
         # Node timer frequency in Hz, defining how often sensor data is requested
