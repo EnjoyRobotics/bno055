@@ -45,7 +45,7 @@ class UART(Connector):
     CONNECTIONTYPE_UART = 'uart'
     MAX_RETRIES = 10
 
-    def __init__(self, node: Node, baudrate, port, timeout):
+    def __init__(self, node: Node, baudrate, port, timeout, uart_first_bytes_timeout):
         """Initialize the UART class.
 
         :param node: a ROS node
@@ -60,6 +60,7 @@ class UART(Connector):
         self.baudrate = baudrate
         self.port = port
         self.timeout = timeout
+        self.uart_first_bytes_timeout = uart_first_bytes_timeout
         self.serialConnection = None
 
     def connect(self):
@@ -83,6 +84,8 @@ class UART(Connector):
         :param length: The data length
         :return:
         """
+        self.serialConnection.timeout = self.uart_first_bytes_timeout
+
         buf_out = bytearray()
         buf_out.append(registers.COM_START_BYTE_WR)
         buf_out.append(registers.COM_READ)
@@ -92,7 +95,7 @@ class UART(Connector):
         for attempt in range(0, self.MAX_RETRIES):
             try:
                 self.serialConnection.write(buf_out)
-                buf_in = bytearray(self.serialConnection.read(2 + length))
+                buf_in = bytearray(self.serialConnection.read(2))
             except Exception as e:  # noqa: B902
                 self.node.get_logger().error('Transmission error: %s' % e)
                 continue
@@ -118,6 +121,13 @@ class UART(Connector):
             # Check for correct READ response header:
             if buf_in[0] != registers.COM_START_BYTE_RESP:
                 self.node.get_logger().error('Wrong READ-request response header %s' % hex(buf_in[0]))
+                continue
+            
+            self.serialConnection.timeout = self.timeout
+            try:
+                buf_in.extend(self.serialConnection.read(length))
+            except Exception as e:  # noqa: B902
+                self.node.get_logger().error('Transmission error: %s' % e)
                 continue
 
             if (buf_in.__len__()-2) != buf_in[1]:
@@ -151,6 +161,8 @@ class UART(Connector):
         :param length: The data length
         :return:
         """
+        self.serialConnection.timeout = self.timeout
+
         buf_out = bytearray()
         buf_out.append(registers.COM_START_BYTE_WR)
         buf_out.append(registers.COM_WRITE)
