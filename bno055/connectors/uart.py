@@ -111,7 +111,7 @@ class UART(Connector):
                 # Error 0x07 (BUS_OVER_RUN_ERROR) can be "normal" if data fusion is not yet ready
                 if buf_in[1] == 7:
                     # see #5
-                    self.node.get_logger().error('Data fusion not ready, resend read request')
+                    self.node.get_logger().debug('Data fusion not ready, resend read request')
                     continue
                 else:
                     self.node.get_logger().error('READ-request failed with error code %s'
